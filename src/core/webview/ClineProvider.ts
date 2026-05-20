@@ -2970,11 +2970,6 @@ export class ClineProvider
 						awaitingChildId: undefined,
 					})
 
-					historyItem = {
-						...historyItem,
-						parentTaskId: undefined,
-						rootTaskId: undefined,
-					}
 					parentTask = undefined
 					rootTask = undefined
 				}
