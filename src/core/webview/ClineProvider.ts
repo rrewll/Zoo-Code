@@ -2866,7 +2866,9 @@ export class ClineProvider
 		})
 
 		await this.addClineToStack(task)
-		task.start()
+		if (options.startTask !== false) {
+			task.start()
+		}
 
 		this.log(
 			`[createTask] ${task.parentTask ? "child" : "parent"} task ${task.taskId}.${task.instanceId} instantiated`,
@@ -3264,6 +3266,7 @@ export class ClineProvider
 					(err as Error)?.message ?? String(err)
 				}`,
 			)
+			throw err
 		}
 
 		// 6) Start the child task now that parent metadata is safely persisted.
