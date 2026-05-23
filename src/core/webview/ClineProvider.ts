@@ -484,7 +484,7 @@ export class ClineProvider
 				try {
 					const { historyItem: parentHistory } = await this.getTaskWithId(parentTaskId)
 
-					if (parentHistory.status === "delegated" && parentHistory.awaitingChildId === childTaskId) {
+					if (parentHistory?.status === "delegated" && parentHistory?.awaitingChildId === childTaskId) {
 						await this.updateTaskHistory({
 							...parentHistory,
 							status: "active",
@@ -2965,13 +2965,16 @@ export class ClineProvider
 			try {
 				const { historyItem: parentHistory } = await this.getTaskWithId(task.parentTaskId)
 
-				if (parentHistory.status === "delegated" && parentHistory.awaitingChildId === task.taskId) {
+				if (parentHistory?.status === "delegated" && parentHistory?.awaitingChildId === task.taskId) {
 					await this.updateTaskHistory({
 						...parentHistory,
 						status: "active",
 						awaitingChildId: undefined,
 					})
 
+					this.log(
+						`[cancelTask] Detached delegated parent ${task.parentTaskId}: delegated → active (child ${task.taskId} cancelled)`,
+					)
 					parentTask = undefined
 					rootTask = undefined
 				}
@@ -3169,6 +3172,16 @@ export class ClineProvider
 				`[delegateParentAndOpenChild] Parent mismatch: expected ${parentTaskId}, current ${parent.taskId}`,
 			)
 		}
+		let parentModeBeforeDelegation: string | undefined
+		try {
+			parentModeBeforeDelegation = await parent.getTaskMode()
+		} catch (error) {
+			this.log(
+				`[delegateParentAndOpenChild] Failed to capture parent mode for ${parentTaskId} before delegation (non-fatal): ${
+					error instanceof Error ? error.message : String(error)
+				}`,
+			)
+		}
 		// 2) Flush pending tool results to API history BEFORE disposing the parent.
 		//    This is critical: when tools are called before new_task,
 		//    their tool_result blocks are in userMessageContent but not yet saved to API history.
@@ -3249,8 +3262,10 @@ export class ClineProvider
 		})
 
 		// 5) Persist parent delegation metadata BEFORE the child starts writing.
+		let parentHistoryBeforeDelegation: HistoryItem | undefined
 		try {
 			const { historyItem } = await this.getTaskWithId(parentTaskId)
+			parentHistoryBeforeDelegation = historyItem
 			const childIds = Array.from(new Set([...(historyItem.childIds ?? []), child.taskId]))
 			const updatedHistory: typeof historyItem = {
 				...historyItem,
@@ -3266,6 +3281,41 @@ export class ClineProvider
 					(err as Error)?.message ?? String(err)
 				}`,
 			)
+			try {
+				await this.removeClineFromStack({ skipDelegationRepair: true })
+			} catch (cleanupErr) {
+				this.log(
+					`[delegateParentAndOpenChild] Failed to remove child ${child.taskId} after parent metadata persistence failure (non-fatal): ${
+						(cleanupErr as Error)?.message ?? String(cleanupErr)
+					}`,
+				)
+			}
+			try {
+				await this.deleteTaskFromState(child.taskId)
+			} catch (cleanupErr) {
+				this.log(
+					`[delegateParentAndOpenChild] Failed to remove child ${child.taskId} history after parent metadata persistence failure (non-fatal): ${
+						(cleanupErr as Error)?.message ?? String(cleanupErr)
+					}`,
+				)
+			}
+			if (parentHistoryBeforeDelegation) {
+				try {
+					await this.createTaskWithHistoryItem(
+						{
+							...parentHistoryBeforeDelegation,
+							mode: parentModeBeforeDelegation ?? parentHistoryBeforeDelegation.mode,
+						},
+						{ startTask: false },
+					)
+				} catch (cleanupErr) {
+					this.log(
+						`[delegateParentAndOpenChild] Failed to rehydrate parent ${parentTaskId} after parent metadata persistence failure (non-fatal): ${
+							(cleanupErr as Error)?.message ?? String(cleanupErr)
+						}`,
+					)
+				}
+			}
 			throw err
 		}
 
