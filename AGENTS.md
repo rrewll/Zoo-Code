@@ -4,6 +4,17 @@ This file provides guidance to agents when working with code in this repository.
 
 - Settings View Pattern: When working on `SettingsView`, inputs must bind to the local `cachedState`, NOT the live `useExtensionState()`. The `cachedState` acts as a buffer for user edits, isolating them from the `ContextProxy` source-of-truth until the user explicitly clicks "Save". Wiring inputs directly to the live state causes race conditions.
 
+## LLM-Assisted Contribution Guidance
+
+Before implementing a non-trivial change, decompose it into the smallest independently reviewable slices you can.
+
+- One independently reviewable unit per PR. A PR should be understandable, testable, and mergeable on its own without the next PR.
+- Prefer stacked draft PRs over one large PR when a change naturally builds in layers. Link dependent PRs and keep them small.
+- Separate refactors from behavior changes. If a change both restructures code and adds or fixes user-visible behavior, land the preparatory refactor first.
+- "Tightly coupled" is not enough reason to bundle everything together. Shared files or runtime coupling do not automatically mean the work belongs in one PR.
+- Use this test when deciding whether work must stay together: if PR A can merge without leaving the repository broken or degraded while PR B waits, they should usually be separate PRs.
+- When the decomposition is unclear, pause before coding and propose the split in the issue or in a draft PR.
+
 ## Test Placement Guidance
 
 Prefer the narrowest test layer that proves the behavior. This follows standard test-pyramid guidance: keep most coverage in fast, focused tests; add integration tests for cross-module contracts; reserve end-to-end tests for full workflow confidence.
